@@ -7,6 +7,7 @@ import (
 	"github.com/jhoonb/archivex"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -60,6 +61,8 @@ func main() {
 
 	flag.Parse()
 
+	setupLogger()
+
 	var wg sync.WaitGroup
 
 	for {
@@ -70,6 +73,7 @@ func main() {
 			if debug {
 				fmt.Printf("Updating to %s\n", newestVersion.ID)
 			}
+			log.Printf("Updating to %s\n", newestVersion.ID)
 
 			wg.Add(1)
 			go downloadNewVersion(newestVersion.ID, &wg)
@@ -82,6 +86,15 @@ func main() {
 		}
 		time.Sleep(time.Duration(updateInterval) * time.Hour)
 	}
+}
+
+func setupLogger() {
+	f, err := os.OpenFile("minecraft_updater.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		panic(err)
+	}
+
+	log.SetOutput(f)
 }
 
 func perror(err error) {
@@ -119,11 +132,14 @@ func currentServerVersion() string {
 	if err != nil {
 		fmt.Println("current_version doesn't exist.")
 	}
+	log.Println("current_version doesn't exist.")
+
 	currentVersionID := string(fileBuffer)
 
 	if debug {
 		fmt.Printf("Current Version %s\n", currentVersionID)
 	}
+	log.Printf("Current Version %s\n", currentVersionID)
 
 	return currentVersionID
 }
@@ -150,6 +166,7 @@ func backupFiles(versionID string, wg *sync.WaitGroup) {
 	if debug {
 		fmt.Printf("backupFiles - %s\n", versionID)
 	}
+	log.Printf("backupFiles - %s\n", versionID)
 
 	fileName := fmt.Sprintf("%s%s%s_backup", backupDir, string(os.PathSeparator), versionID)
 	worldDir := fmt.Sprintf("%s", worldDir)
@@ -159,6 +176,7 @@ func backupFiles(versionID string, wg *sync.WaitGroup) {
 			if debug {
 				fmt.Println("Nothing to backup right now.")
 			}
+			log.Println("Nothing to backup right now.")
 		} else {
 			zip := new(archivex.ZipFile)
 			zip.Create(fileName)
@@ -187,6 +205,7 @@ func readServerPid() (int, error) {
 	fileBuffer, err := ioutil.ReadFile(".pid")
 	if err != nil {
 		fmt.Println("current_version doesn't exist.")
+		log.Println("current_version doesn't exist.")
 		return 0, err
 	}
 	pidString := string(fileBuffer)
@@ -201,6 +220,7 @@ func startServer(version string) {
 	command := fmt.Sprintf("java -Xmx%dM -Xms%dM -jar %s nogui", ramAlloc, ramAlloc, fileName)
 
 	fmt.Printf("running %s\n", command)
+	log.Printf("running %s\n", command)
 	serverCmd = exec.Command("java", "-Xmx2048M", "-Xms2048M", "-jar", fileName, "nogui")
 	serverCmd.SysProcAttr = &syscall.SysProcAttr{}
 	serverCmd.SysProcAttr.Setpgid = true
@@ -208,13 +228,16 @@ func startServer(version string) {
 	err := serverCmd.Start()
 	perror(err)
 	fmt.Printf("Server running...\n")
+	log.Printf("Server running...\n")
 	go watchServer(serverCmd)
 }
 
 func watchServer(cmd *exec.Cmd) {
 	fmt.Printf("Watching command %d...\n", cmd.Process.Pid)
+	log.Printf("Watching command %d...\n", cmd.Process.Pid)
 	err := cmd.Wait()
 	fmt.Printf("Command finished with error: %s\n", err)
+	log.Printf("Command finished with error: %s\n", err)
 }
 
 func stopServer(version string) {
@@ -232,12 +255,14 @@ func downloadNewVersion(versionID string, wg *sync.WaitGroup) {
 	if debug {
 		fmt.Printf("downloading - %s\n", versionID)
 	}
+	log.Printf("downloading - %s\n", versionID)
 
 	fileName := fmt.Sprintf("minecraft_server.%s.jar", versionID)
 	url := fmt.Sprintf("%s/%s/minecraft_server.%s.jar", downloadURL, versionID, versionID)
 
 	if _, err := os.Stat(fileName); err == nil {
 		fmt.Printf("%s exists; processing...\n", fileName)
+		log.Printf("%s exists; processing...\n", fileName)
 		return
 	}
 
@@ -274,6 +299,7 @@ func (versions *Versions) Newest() Version {
 	if debug {
 		fmt.Printf("newestVersion - %s\n", newestVersion.ID)
 	}
+	log.Printf("newestVersion - %s\n", newestVersion.ID)
 
 	return newestVersion
 }
