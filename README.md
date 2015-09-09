@@ -1,6 +1,8 @@
 # Minecraft Updater
 Simple tool to help keep minecraft's server up-to-date
 
+[![Build Status](https://travis-ci.org/joekr/minecraft_updater.svg?branch=master)](https://travis-ci.org/joekr/minecraft_updater)
+
 ### Flags
 You can change many of the defaults using the following flags:
 

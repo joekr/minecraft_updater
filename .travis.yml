@@ -5,6 +5,8 @@ go:
          - tip
 
 install: go get -v github.com/jhoonb/archivex
+script:
+    - make build
 
 matrix:
     allow_failures:
