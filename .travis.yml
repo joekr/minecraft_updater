@@ -1,0 +1,11 @@
+language: go
+sudo: false
+go:
+         - 1.5
+         - tip
+
+install: go get -v github.com/jhoonb/archivex
+
+matrix:
+    allow_failures:
+        - go: tip
