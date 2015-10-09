@@ -10,11 +10,8 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
-	"strconv"
-	"strings"
+	"os/signal"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -47,7 +44,7 @@ var worldDir string
 var backupDir string
 var downloadURL string
 
-var serverCmd *exec.Cmd
+var server *Server
 
 func main() {
 	flag.IntVar(&updateInterval, "updateInterval", 4, "Integer value in hours to check for updates (default: 4)")
@@ -60,6 +57,10 @@ func main() {
 	flag.StringVar(&downloadURL, "downloadURL", "https://s3.amazonaws.com/Minecraft.Download/versions", "Download server Url")
 
 	flag.Parse()
+	handleExit()
+
+	server = NewServer()
+	server.makeServerRunning()
 
 	setupLogger()
 
@@ -82,10 +83,20 @@ func main() {
 			go backupFiles(newestVersion.ID, &wg)
 
 			wg.Wait()
-			updateServer(currentServerVersion(), newestVersion.ID)
+			updateServer(newestVersion.ID)
 		}
 		time.Sleep(time.Duration(updateInterval) * time.Hour)
 	}
+}
+
+func handleExit() {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		<-c
+		fmt.Println("Exiting")
+		os.Exit(1)
+	}()
 }
 
 func setupLogger() {
@@ -189,64 +200,10 @@ func backupFiles(versionID string, wg *sync.WaitGroup) {
 	}
 }
 
-func updateServer(oldVersion string, newVersion string) {
+func updateServer(newVersion string) {
 	writeCurrentVersion(newVersion)
-	stopServer(oldVersion)
-	startServer(newVersion)
-}
-
-func writeServerPid(pid int) {
-	pidString := strconv.Itoa(pid)
-	err := ioutil.WriteFile(".pid", []byte(pidString), 0644)
-	perror(err)
-}
-
-func readServerPid() (int, error) {
-	fileBuffer, err := ioutil.ReadFile(".pid")
-	if err != nil {
-		fmt.Println("current_version doesn't exist.")
-		log.Println("current_version doesn't exist.")
-		return 0, err
-	}
-	pidString := string(fileBuffer)
-	pid, err := strconv.Atoi(strings.Replace(pidString, "\n", "", -1))
-	perror(err)
-
-	return pid, nil
-}
-
-func startServer(version string) {
-	fileName := fmt.Sprintf("minecraft_server.%s.jar", version)
-	command := fmt.Sprintf("java -Xmx%dM -Xms%dM -jar %s nogui", ramAlloc, ramAlloc, fileName)
-
-	fmt.Printf("running %s\n", command)
-	log.Printf("running %s\n", command)
-	serverCmd = exec.Command("java", "-Xmx2048M", "-Xms2048M", "-jar", fileName, "nogui")
-	serverCmd.SysProcAttr = &syscall.SysProcAttr{}
-	serverCmd.SysProcAttr.Setpgid = true
-	// writeServerPid(serverCmd.Process.Pid)
-	err := serverCmd.Start()
-	perror(err)
-	fmt.Printf("Server running...\n")
-	log.Printf("Server running...\n")
-	go watchServer(serverCmd)
-}
-
-func watchServer(cmd *exec.Cmd) {
-	fmt.Printf("Watching command %d...\n", cmd.Process.Pid)
-	log.Printf("Watching command %d...\n", cmd.Process.Pid)
-	err := cmd.Wait()
-	fmt.Printf("Command finished with error: %s\n", err)
-	log.Printf("Command finished with error: %s\n", err)
-}
-
-func stopServer(version string) {
-	if serverCmd == nil {
-		return
-	}
-
-	err := serverCmd.Process.Kill()
-	perror(err)
+	server.stopServer()
+	server.startServer(newVersion)
 }
 
 func downloadNewVersion(versionID string, wg *sync.WaitGroup) {
